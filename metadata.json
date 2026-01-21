@@ -1,0 +1,5 @@
+{
+  "name": "Annual Meeting Seating Master",
+  "description": "A mobile-first seating chart application for annual meetings. Guests enter their name to instantly locate their seat on a visual map and receive a personalized AI fortune.",
+  "requestFramePermissions": []
+}
