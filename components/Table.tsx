@@ -10,16 +10,29 @@ interface TableProps {
   onMouseDown?: (e: React.MouseEvent) => void;
   onTouchStart?: (e: React.TouchEvent) => void;
   className?: string;
+  dataTableId?: string;
+  isDragging?: boolean;
 }
 
-const Table: React.FC<TableProps> = ({ data, highlightedSeatId, style, onClick, onMouseDown, onTouchStart, className }) => {
+const Table: React.FC<TableProps> = ({ 
+  data, 
+  highlightedSeatId, 
+  style, 
+  onClick, 
+  onMouseDown, 
+  onTouchStart, 
+  className,
+  dataTableId,
+  isDragging = false
+}) => {
   const isTargetTable = data.seats.some(s => s.id === highlightedSeatId);
 
   return (
     <div 
+      data-table-id={dataTableId}
       className={`
         flex flex-col items-center justify-center
-        transition-all duration-700
+        ${isDragging ? '' : 'transition-all duration-700'}
         ${isTargetTable ? 'opacity-100 scale-100 z-30' : highlightedSeatId ? 'opacity-40 scale-90 grayscale z-0' : 'opacity-100 z-10'}
         ${className || ''}
       `}
@@ -65,4 +78,28 @@ const Table: React.FC<TableProps> = ({ data, highlightedSeatId, style, onClick, 
   );
 };
 
-export default Table;
+// Memoize component to prevent unnecessary re-renders
+export default React.memo(Table, (prevProps, nextProps) => {
+  // Only re-render if these props change
+  if (prevProps.data.id !== nextProps.data.id) return false;
+  if (prevProps.data.x !== nextProps.data.x) return false;
+  if (prevProps.data.y !== nextProps.data.y) return false;
+  if (prevProps.data.name !== nextProps.data.name) return false;
+  if (prevProps.data.seats.length !== nextProps.data.seats.length) return false;
+  if (prevProps.highlightedSeatId !== nextProps.highlightedSeatId) return false;
+  if (prevProps.isDragging !== nextProps.isDragging) return false;
+  
+  // Check if seats have changed (only check attendeeName which is what matters for display)
+  if (prevProps.data.seats.length === nextProps.data.seats.length) {
+    for (let i = 0; i < prevProps.data.seats.length; i++) {
+      if (prevProps.data.seats[i].attendeeName !== nextProps.data.seats[i].attendeeName) {
+        return false;
+      }
+      if (prevProps.data.seats[i].seatNumber !== nextProps.data.seats[i].seatNumber) {
+        return false;
+      }
+    }
+  }
+  
+  return true;
+});

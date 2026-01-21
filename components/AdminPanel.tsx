@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { TableData } from '../types';
 import Table from './Table';
 import EditModal from './EditModal';
@@ -36,43 +36,113 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ tables, setTables, onSave, onCl
     hasMoved: false,
   });
 
+  // Use refs to store drag state for performance
+  const dragStateRef = useRef<DragState>(dragState);
+  const tablesRef = useRef<TableData[]>(tables);
+  const rafIdRef = useRef<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const lastPositionRef = useRef<{ x: number; y: number } | null>(null);
+  
+  // Keep refs in sync
+  useEffect(() => {
+    dragStateRef.current = dragState;
+  }, [dragState]);
+  
+  useEffect(() => {
+    tablesRef.current = tables;
+  }, [tables]);
+
+  // Optimized drag handler using requestAnimationFrame
+  const handleGlobalMove = useCallback((e: MouseEvent | TouchEvent) => {
+    const currentDragState = dragStateRef.current;
+    if (currentDragState.mode === 'idle') return;
+
+    const clientX = 'touches' in e ? e.touches[0].clientX : (e as MouseEvent).clientX;
+    const clientY = 'touches' in e ? e.touches[0].clientY : (e as MouseEvent).clientY;
+    const deltaX = clientX - currentDragState.startX;
+    const deltaY = clientY - currentDragState.startY;
+
+    if (Math.abs(deltaX) > 3 || Math.abs(deltaY) > 3) {
+      if (!currentDragState.hasMoved) {
+        setDragState(prev => ({ ...prev, hasMoved: true }));
+      }
+    }
+
+    // Cancel previous animation frame
+    if (rafIdRef.current !== null) {
+      cancelAnimationFrame(rafIdRef.current);
+    }
+
+    // Use requestAnimationFrame for smooth updates
+    rafIdRef.current = requestAnimationFrame(() => {
+      const state = dragStateRef.current;
+      if (state.mode === 'table' && state.targetId) {
+        e.preventDefault();
+        const newX = (state.initialItemX || 0) + deltaX;
+        const newY = (state.initialItemY || 0) + deltaY;
+        
+        // Store latest position
+        lastPositionRef.current = { x: newX, y: newY };
+        
+        // Direct DOM manipulation for better performance during drag
+        const tableElement = document.querySelector(`[data-table-id="${state.targetId}"]`) as HTMLElement;
+        if (tableElement) {
+          tableElement.style.left = `${newX}px`;
+          tableElement.style.top = `${newY}px`;
+        }
+      } else if (state.mode === 'canvas' && containerRef.current) {
+        containerRef.current.scrollLeft = (state.initialScrollX || 0) - deltaX;
+        containerRef.current.scrollTop = (state.initialScrollY || 0) - deltaY;
+      }
+    });
+  }, []);
+
+  const handleGlobalUp = useCallback(() => {
+    const state = dragStateRef.current;
+    
+    // Cancel any pending animation frame
+    if (rafIdRef.current !== null) {
+      cancelAnimationFrame(rafIdRef.current);
+      rafIdRef.current = null;
+    }
+
+    // Update state only when drag ends
+    if (state.mode === 'table' && state.targetId && state.hasMoved) {
+      // Use stored position or fallback to DOM
+      let finalX = state.initialItemX || 0;
+      let finalY = state.initialItemY || 0;
+      
+      if (lastPositionRef.current) {
+        finalX = lastPositionRef.current.x;
+        finalY = lastPositionRef.current.y;
+      } else {
+        // Fallback: get from DOM
+        const tableElement = document.querySelector(`[data-table-id="${state.targetId}"]`) as HTMLElement;
+        if (tableElement) {
+          finalX = parseFloat(tableElement.style.left) || state.initialItemX || 0;
+          finalY = parseFloat(tableElement.style.top) || state.initialItemY || 0;
+        }
+      }
+      
+      setTables(prev => prev.map(t => {
+        if (t.id !== state.targetId) return t;
+        return {
+          ...t,
+          x: finalX,
+          y: finalY
+        };
+      }));
+      setHasUnsavedChanges(true);
+      
+      // Reset position ref
+      lastPositionRef.current = null;
+    }
+
+    setDragState(prev => ({ ...prev, mode: 'idle' }));
+  }, [setTables]);
 
   // Setup Global Event Listeners for Dragging
   useEffect(() => {
-    const handleGlobalMove = (e: MouseEvent | TouchEvent) => {
-      if (dragState.mode === 'idle') return;
-
-      const clientX = 'touches' in e ? e.touches[0].clientX : (e as MouseEvent).clientX;
-      const clientY = 'touches' in e ? e.touches[0].clientY : (e as MouseEvent).clientY;
-      const deltaX = clientX - dragState.startX;
-      const deltaY = clientY - dragState.startY;
-
-      if (Math.abs(deltaX) > 3 || Math.abs(deltaY) > 3) {
-        setDragState(prev => ({ ...prev, hasMoved: true }));
-      }
-
-      if (dragState.mode === 'table' && dragState.targetId) {
-        e.preventDefault();
-        setHasUnsavedChanges(true);
-        setTables(prev => prev.map(t => {
-          if (t.id !== dragState.targetId) return t;
-          return {
-            ...t,
-            x: (dragState.initialItemX || 0) + deltaX,
-            y: (dragState.initialItemY || 0) + deltaY
-          };
-        }));
-      } else if (dragState.mode === 'canvas' && containerRef.current) {
-        containerRef.current.scrollLeft = (dragState.initialScrollX || 0) - deltaX;
-        containerRef.current.scrollTop = (dragState.initialScrollY || 0) - deltaY;
-      }
-    };
-
-    const handleGlobalUp = () => {
-      setDragState(prev => ({ ...prev, mode: 'idle' }));
-    };
-
     if (dragState.mode !== 'idle') {
       window.addEventListener('mousemove', handleGlobalMove, { passive: false });
       window.addEventListener('mouseup', handleGlobalUp);
@@ -85,13 +155,19 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ tables, setTables, onSave, onCl
       window.removeEventListener('mouseup', handleGlobalUp);
       window.removeEventListener('touchmove', handleGlobalMove);
       window.removeEventListener('touchend', handleGlobalUp);
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current);
+      }
     };
-  }, [dragState, setTables]);
+  }, [dragState.mode, handleGlobalMove, handleGlobalUp]);
 
   const startTableDrag = (e: React.MouseEvent | React.TouchEvent, table: TableData) => {
     e.stopPropagation();
     const clientX = 'touches' in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
     const clientY = 'touches' in e ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
+
+    // Reset position ref
+    lastPositionRef.current = null;
 
     setDragState({
       mode: 'table',
@@ -208,6 +284,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ tables, setTables, onSave, onCl
               data={table}
               highlightedSeatId={null}
               className="absolute hover:z-50"
+              dataTableId={table.id}
+              isDragging={dragState.mode === 'table' && dragState.targetId === table.id}
               style={{
                 left: table.x,
                 top: table.y,
