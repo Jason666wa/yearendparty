@@ -22,3 +22,21 @@ export interface UserState {
     seatNumber: number;
   } | null;
 }
+
+export interface PhotoData {
+  id: string;
+  filename: string;
+  originalFilename: string;
+  filePath: string;
+  uploaderIp: string;
+  voteCount: number;
+  createdAt: string;
+  updatedAt: string;
+  imageUrl?: string; // 前端使用的图片URL
+  hasVoted?: boolean; // 当前IP是否已投票
+}
+
+export interface VotingStatus {
+  votingEnabled: boolean;
+  votingStopped: boolean;
+}

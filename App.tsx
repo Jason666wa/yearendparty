@@ -4,6 +4,9 @@ import Table from './components/Table';
 import FortuneModal from './components/FortuneModal';
 import AdminPanel from './components/AdminPanel';
 import QRCodeModal from './components/QRCodeModal';
+import PhotoUploadPage from './components/PhotoUploadPage';
+import PhotoGallery from './components/PhotoGallery';
+import VotingAdminPanel from './components/VotingAdminPanel';
 
 const App: React.FC = () => {
   const [tables, setTables] = useState<TableData[]>([]);
@@ -23,32 +26,68 @@ const App: React.FC = () => {
   const [adminPassword, setAdminPassword] = useState('');
   const [adminPasswordError, setAdminPasswordError] = useState('');
   const [showQRCode, setShowQRCode] = useState(false);
+  const [qrCodeType, setQrCodeType] = useState<'main' | 'upload'>('main');
+  const [showVotingAdmin, setShowVotingAdmin] = useState(false);
+  const [currentPage, setCurrentPage] = useState<'home' | 'upload' | 'gallery'>('home');
   const ADMIN_PASSWORD = 'xinhuadu2026';
   const QR_CODE_URL = 'http://10.10.10.53:8282';
+  const UPLOAD_QR_CODE_URL = `${QR_CODE_URL}#/upload`;
+  const GALLERY_QR_CODE_URL = `${QR_CODE_URL}#/gallery`;
+
+  // 处理路由
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (hash === '#/upload') {
+      setCurrentPage('upload');
+    } else if (hash === '#/gallery') {
+      setCurrentPage('gallery');
+    } else {
+      setCurrentPage('home');
+    }
+
+    // 监听hash变化
+    const handleHashChange = () => {
+      const newHash = window.location.hash;
+      if (newHash === '#/upload') {
+        setCurrentPage('upload');
+      } else if (newHash === '#/gallery') {
+        setCurrentPage('gallery');
+      } else {
+        setCurrentPage('home');
+      }
+    };
+
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
 
   // Fetch Tables on Mount
   useEffect(() => {
-    fetch('/api/tables')
-      .then(res => {
-        if (!res.ok) {
-          throw new Error(`Server error: ${res.status}`);
-        }
-        return res.json();
-      })
-      .then(data => {
-        if (Array.isArray(data)) {
-            setTables(data);
-        } else {
-            console.error("Received invalid data format:", data);
-            setTables([]);
-        }
-        setLoading(false);
-      })
-      .catch(err => {
-        console.error("Failed to load tables", err);
-        setLoading(false);
-      });
-  }, []);
+    if (currentPage === 'home') {
+      fetch('/api/tables')
+        .then(res => {
+          if (!res.ok) {
+            throw new Error(`Server error: ${res.status}`);
+          }
+          return res.json();
+        })
+        .then(data => {
+          if (Array.isArray(data)) {
+              setTables(data);
+          } else {
+              console.error("Received invalid data format:", data);
+              setTables([]);
+          }
+          setLoading(false);
+        })
+        .catch(err => {
+          console.error("Failed to load tables", err);
+          setLoading(false);
+        });
+    } else {
+      setLoading(false);
+    }
+  }, [currentPage]);
 
   const handleSaveTables = async (newTables: TableData[]) => {
     setTables(newTables);
@@ -128,16 +167,56 @@ const App: React.FC = () => {
     return <div className="min-h-screen flex items-center justify-center text-festive-red">加载中...</div>;
   }
 
+  // 如果显示投票管理面板
+  if (showVotingAdmin) {
+    return <VotingAdminPanel onClose={() => setShowVotingAdmin(false)} />;
+  }
+
+  // 如果显示上传页面
+  if (currentPage === 'upload') {
+    return (
+      <>
+        <PhotoUploadPage onUploadSuccess={() => window.location.hash = '#/gallery'} />
+        {showQRCode && (
+          <QRCodeModal 
+            url={qrCodeType === 'upload' ? UPLOAD_QR_CODE_URL : QR_CODE_URL}
+            onClose={() => setShowQRCode(false)}
+          />
+        )}
+      </>
+    );
+  }
+
+  // 如果显示投票页面
+  if (currentPage === 'gallery') {
+    return (
+      <>
+        <PhotoGallery />
+        {showQRCode && (
+          <QRCodeModal 
+            url={qrCodeType === 'upload' ? UPLOAD_QR_CODE_URL : GALLERY_QR_CODE_URL}
+            onClose={() => setShowQRCode(false)}
+          />
+        )}
+      </>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-stone-50 text-gray-800 pb-20 relative overflow-hidden flex flex-col">
-      {isAdminMode ? (
+      {isAdminMode && (
         <AdminPanel 
           tables={tables} 
           setTables={setTables} 
           onSave={handleSaveTables}
-          onClose={() => setIsAdminMode(false)} 
+          onClose={() => setIsAdminMode(false)}
+          onShowVotingAdmin={() => {
+            setIsAdminMode(false);
+            setShowVotingAdmin(true);
+          }}
         />
-      ) : (
+      )}
+      {!isAdminMode && currentPage === 'home' && (
         <>
           <header className="bg-festive-red text-white p-4 sticky top-0 z-40 shadow-md shrink-0">
             <div className="flex justify-between items-center max-w-md mx-auto">
@@ -146,11 +225,31 @@ const App: React.FC = () => {
               </h1>
               <div className="flex items-center gap-2">
                 <button 
-                  onClick={() => setShowQRCode(true)}
+                  onClick={() => {
+                    setQrCodeType('main');
+                    setShowQRCode(true);
+                  }}
                   className="text-xs bg-white/20 px-3 py-1 rounded hover:bg-white/30 flex items-center gap-1"
-                  title="显示二维码"
+                  title="显示主页面二维码"
                 >
-                  📱 二维码
+                  📱 主页
+                </button>
+                <button 
+                  onClick={() => {
+                    setQrCodeType('upload');
+                    setShowQRCode(true);
+                  }}
+                  className="text-xs bg-white/20 px-3 py-1 rounded hover:bg-white/30 flex items-center gap-1"
+                  title="显示上传照片二维码"
+                >
+                  📸 上传
+                </button>
+                <button 
+                  onClick={() => window.location.hash = '#/gallery'}
+                  className="text-xs bg-white/20 px-3 py-1 rounded hover:bg-white/30 flex items-center gap-1"
+                  title="查看照片投票"
+                >
+                  🗳️ 投票
                 </button>
                 {userState.isLoggedIn && (
                   <button 
@@ -358,7 +457,7 @@ const App: React.FC = () => {
 
           {showQRCode && (
             <QRCodeModal 
-              url={QR_CODE_URL}
+              url={qrCodeType === 'upload' ? UPLOAD_QR_CODE_URL : QR_CODE_URL}
               onClose={() => setShowQRCode(false)}
             />
           )}

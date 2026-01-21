@@ -8,6 +8,7 @@ interface AdminPanelProps {
   setTables: React.Dispatch<React.SetStateAction<TableData[]>>;
   onSave: (tables: TableData[]) => void;
   onClose: () => void;
+  onShowVotingAdmin?: () => void;
 }
 
 type DragMode = 'idle' | 'table' | 'canvas';
@@ -24,7 +25,7 @@ interface DragState {
   hasMoved: boolean;
 }
 
-const AdminPanel: React.FC<AdminPanelProps> = ({ tables, setTables, onSave, onClose }) => {
+const AdminPanel: React.FC<AdminPanelProps> = ({ tables, setTables, onSave, onClose, onShowVotingAdmin }) => {
   const [editingTable, setEditingTable] = useState<TableData | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   
@@ -258,6 +259,17 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ tables, setTables, onSave, onCl
            >
              + 添加桌子
            </button>
+           {onShowVotingAdmin && (
+             <>
+               <div className="w-px h-6 bg-gray-300 mx-1"></div>
+               <button 
+                 onClick={onShowVotingAdmin}
+                 className="bg-purple-600 text-white text-xs px-3 py-2 rounded shadow hover:bg-purple-700 active:scale-95 transition-transform"
+               >
+                 🎯 投票管理
+               </button>
+             </>
+           )}
            <button 
              onClick={onClose}
              className="bg-gray-800 text-white text-xs px-3 py-2 rounded shadow hover:bg-gray-900 active:scale-95 transition-transform"

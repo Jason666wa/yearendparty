@@ -1,5 +1,5 @@
 import mysql from 'mysql2/promise';
-import { TableData } from '../types.js';
+import { TableData, PhotoData, VotingStatus } from '../types.js';
 
 interface TableRow {
   id: string;
@@ -135,6 +135,164 @@ class DatabaseService {
     } catch (error) {
       await connection.rollback();
       console.error('Failed to save tables:', error);
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
+
+  // ========== 照片相关方法 ==========
+  
+  // 添加照片
+  async addPhoto(photo: Omit<PhotoData, 'createdAt' | 'updatedAt'>): Promise<void> {
+    try {
+      await this.pool.execute(
+        'INSERT INTO photos (id, filename, original_filename, file_path, uploader_ip, vote_count) VALUES (?, ?, ?, ?, ?, ?)',
+        [photo.id, photo.filename, photo.originalFilename, photo.filePath, photo.uploaderIp, photo.voteCount || 0]
+      );
+    } catch (error) {
+      console.error('Failed to add photo:', error);
+      throw error;
+    }
+  }
+
+  // 获取所有照片（带投票信息）
+  async getPhotos(voterIp?: string): Promise<PhotoData[]> {
+    try {
+      const [photos] = await this.pool.execute<mysql.RowDataPacket[]>(
+        'SELECT id, filename, original_filename, file_path, uploader_ip, vote_count, created_at, updated_at FROM photos ORDER BY created_at DESC'
+      );
+
+      const photoList: PhotoData[] = (photos as any[]).map(photo => ({
+        id: photo.id,
+        filename: photo.filename,
+        originalFilename: photo.original_filename,
+        filePath: photo.file_path,
+        uploaderIp: photo.uploader_ip,
+        voteCount: photo.vote_count,
+        createdAt: photo.created_at,
+        updatedAt: photo.updated_at,
+        hasVoted: false, // 默认值，后面会根据实际情况更新
+      }));
+
+      // 如果提供了voterIp，检查每张照片是否已投票
+      if (voterIp) {
+        const photoIds = photoList.map(p => p.id);
+        if (photoIds.length > 0) {
+          const placeholders = photoIds.map(() => '?').join(',');
+          const [votes] = await this.pool.execute<mysql.RowDataPacket[]>(
+            `SELECT photo_id FROM votes WHERE photo_id IN (${placeholders}) AND voter_ip = ?`,
+            [...photoIds, voterIp]
+          );
+          const votedPhotoIds = new Set((votes as any[]).map(v => v.photo_id));
+          photoList.forEach(photo => {
+            photo.hasVoted = votedPhotoIds.has(photo.id);
+          });
+        }
+      }
+
+      return photoList;
+    } catch (error) {
+      console.error('Failed to get photos:', error);
+      throw error;
+    }
+  }
+
+  // 投票
+  async votePhoto(photoId: string, voterIp: string): Promise<boolean> {
+    const connection = await this.pool.getConnection();
+    await connection.beginTransaction();
+
+    try {
+      // 检查是否已经投过票
+      const [existing] = await connection.execute<mysql.RowDataPacket[]>(
+        'SELECT id FROM votes WHERE photo_id = ? AND voter_ip = ?',
+        [photoId, voterIp]
+      );
+
+      if (existing.length > 0) {
+        await connection.rollback();
+        return false; // 已经投过票
+      }
+
+      // 插入投票记录
+      const voteId = `vote-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      await connection.execute(
+        'INSERT INTO votes (id, photo_id, voter_ip) VALUES (?, ?, ?)',
+        [voteId, photoId, voterIp]
+      );
+
+      // 更新照片的投票数
+      await connection.execute(
+        'UPDATE photos SET vote_count = vote_count + 1 WHERE id = ?',
+        [photoId]
+      );
+
+      await connection.commit();
+      return true;
+    } catch (error) {
+      await connection.rollback();
+      console.error('Failed to vote photo:', error);
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
+
+  // ========== 投票设置相关方法 ==========
+
+  // 获取投票状态
+  async getVotingStatus(): Promise<VotingStatus> {
+    try {
+      const [settings] = await this.pool.execute<mysql.RowDataPacket[]>(
+        'SELECT setting_key, setting_value FROM voting_settings WHERE setting_key IN (?, ?)',
+        ['voting_enabled', 'voting_stopped']
+      );
+
+      const status: VotingStatus = {
+        votingEnabled: true,
+        votingStopped: false,
+      };
+
+      (settings as any[]).forEach(setting => {
+        if (setting.setting_key === 'voting_enabled') {
+          status.votingEnabled = setting.setting_value === 'true';
+        } else if (setting.setting_key === 'voting_stopped') {
+          status.votingStopped = setting.setting_value === 'true';
+        }
+      });
+
+      return status;
+    } catch (error) {
+      console.error('Failed to get voting status:', error);
+      throw error;
+    }
+  }
+
+  // 更新投票状态
+  async updateVotingStatus(status: Partial<VotingStatus>): Promise<void> {
+    const connection = await this.pool.getConnection();
+    await connection.beginTransaction();
+
+    try {
+      if (status.votingEnabled !== undefined) {
+        await connection.execute(
+          'INSERT INTO voting_settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = ?',
+          ['voting_enabled', status.votingEnabled ? 'true' : 'false', status.votingEnabled ? 'true' : 'false']
+        );
+      }
+
+      if (status.votingStopped !== undefined) {
+        await connection.execute(
+          'INSERT INTO voting_settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = ?',
+          ['voting_stopped', status.votingStopped ? 'true' : 'false', status.votingStopped ? 'true' : 'false']
+        );
+      }
+
+      await connection.commit();
+    } catch (error) {
+      await connection.rollback();
+      console.error('Failed to update voting status:', error);
       throw error;
     } finally {
       connection.release();
