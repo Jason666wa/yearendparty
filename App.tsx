@@ -3,6 +3,7 @@ import { UserState, TableData } from './types';
 import Table from './components/Table';
 import FortuneModal from './components/FortuneModal';
 import AdminPanel from './components/AdminPanel';
+import QRCodeModal from './components/QRCodeModal';
 
 const App: React.FC = () => {
   const [tables, setTables] = useState<TableData[]>([]);
@@ -21,7 +22,9 @@ const App: React.FC = () => {
   const [showAdminPassword, setShowAdminPassword] = useState(false);
   const [adminPassword, setAdminPassword] = useState('');
   const [adminPasswordError, setAdminPasswordError] = useState('');
+  const [showQRCode, setShowQRCode] = useState(false);
   const ADMIN_PASSWORD = 'xinhuadu2026';
+  const QR_CODE_URL = 'http://10.10.10.53:8282';
 
   // Fetch Tables on Mount
   useEffect(() => {
@@ -141,14 +144,23 @@ const App: React.FC = () => {
               <h1 className="text-lg font-bold flex items-center gap-2">
                 🧧 2025 Annual Meeting
               </h1>
-              {userState.isLoggedIn && (
+              <div className="flex items-center gap-2">
                 <button 
-                  onClick={handleReset}
-                  className="text-xs bg-white/20 px-3 py-1 rounded hover:bg-white/30"
+                  onClick={() => setShowQRCode(true)}
+                  className="text-xs bg-white/20 px-3 py-1 rounded hover:bg-white/30 flex items-center gap-1"
+                  title="显示二维码"
                 >
-                  退出
+                  📱 二维码
                 </button>
-              )}
+                {userState.isLoggedIn && (
+                  <button 
+                    onClick={handleReset}
+                    className="text-xs bg-white/20 px-3 py-1 rounded hover:bg-white/30"
+                  >
+                    退出
+                  </button>
+                )}
+              </div>
             </div>
           </header>
 
@@ -342,6 +354,13 @@ const App: React.FC = () => {
                 </form>
               </div>
             </div>
+          )}
+
+          {showQRCode && (
+            <QRCodeModal 
+              url={QR_CODE_URL}
+              onClose={() => setShowQRCode(false)}
+            />
           )}
         </>
       )}
