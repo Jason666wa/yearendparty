@@ -9,13 +9,13 @@
 
 services:
   mysql:
-    image: mysql:8.0  # 将通过配置的镜像加速器从清华源拉取
+    image: mariadb:10.11  # 使用 MariaDB 替代 MySQL，兼容旧 CPU 架构
     container_name: yearendparty_mysql
     environment:
-      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-rootpassword}
-      MYSQL_DATABASE: yearendparty
-      MYSQL_USER: ${DB_USER:-appuser}
-      MYSQL_PASSWORD: ${DB_PASSWORD:-rootpassword}
+      MARIADB_ROOT_PASSWORD: ${DB_PASSWORD:-rootpassword}
+      MARIADB_DATABASE: yearendparty
+      MARIADB_USER: ${DB_USER:-appuser}
+      MARIADB_PASSWORD: ${DB_PASSWORD:-rootpassword}
     ports:
       - "3636:3306"
     volumes:
@@ -23,10 +23,11 @@ services:
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql
     restart: always
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpassword"]
+      test: ["CMD-SHELL", "mariadb-admin ping -h localhost -u root -prootpassword || exit 1"]
       interval: 10s
-      timeout: 5s
-      retries: 5
+      timeout: 10s
+      retries: 10
+      start_period: 40s
 
   app:
     build:
@@ -38,7 +39,7 @@ services:
       - "8282:3000"  # 使用 8282 端口避免需要管理员权限
     depends_on:
       mysql:
-        condition: service_healthy
+        condition: service_started
     environment:
       - API_KEY=${API_KEY}
       - DB_HOST=mysql
