@@ -6,6 +6,7 @@ import EditModal from './EditModal';
 interface AdminPanelProps {
   tables: TableData[];
   setTables: React.Dispatch<React.SetStateAction<TableData[]>>;
+  onSave: (tables: TableData[]) => void;
   onClose: () => void;
 }
 
@@ -23,8 +24,9 @@ interface DragState {
   hasMoved: boolean;
 }
 
-const AdminPanel: React.FC<AdminPanelProps> = ({ tables, setTables, onClose }) => {
+const AdminPanel: React.FC<AdminPanelProps> = ({ tables, setTables, onSave, onClose }) => {
   const [editingTable, setEditingTable] = useState<TableData | null>(null);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   
   // Unified Drag State
   const [dragState, setDragState] = useState<DragState>({
@@ -46,13 +48,13 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ tables, setTables, onClose }) =
       const deltaX = clientX - dragState.startX;
       const deltaY = clientY - dragState.startY;
 
-      // Mark as moved if distance is significant (prevents accidental clicks being treated as drags)
       if (Math.abs(deltaX) > 3 || Math.abs(deltaY) > 3) {
         setDragState(prev => ({ ...prev, hasMoved: true }));
       }
 
       if (dragState.mode === 'table' && dragState.targetId) {
-        e.preventDefault(); // Prevent scrolling while dragging table
+        e.preventDefault();
+        setHasUnsavedChanges(true);
         setTables(prev => prev.map(t => {
           if (t.id !== dragState.targetId) return t;
           return {
@@ -62,7 +64,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ tables, setTables, onClose }) =
           };
         }));
       } else if (dragState.mode === 'canvas' && containerRef.current) {
-        // Pan the container
         containerRef.current.scrollLeft = (dragState.initialScrollX || 0) - deltaX;
         containerRef.current.scrollTop = (dragState.initialScrollY || 0) - deltaY;
       }
@@ -88,7 +89,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ tables, setTables, onClose }) =
   }, [dragState, setTables]);
 
   const startTableDrag = (e: React.MouseEvent | React.TouchEvent, table: TableData) => {
-    e.stopPropagation(); // Stop bubbling so we don't drag canvas
+    e.stopPropagation();
     const clientX = 'touches' in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
     const clientY = 'touches' in e ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
 
@@ -104,7 +105,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ tables, setTables, onClose }) =
   };
 
   const startCanvasDrag = (e: React.MouseEvent | React.TouchEvent) => {
-    // Only allow left click for mouse
     if ('button' in e && (e as React.MouseEvent).button !== 0) return;
     
     const clientX = 'touches' in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
@@ -120,7 +120,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ tables, setTables, onClose }) =
     });
   };
 
-  // Table Click Handler (only edits if not dragged)
   const handleTableClick = (e: React.MouseEvent, table: TableData) => {
     e.stopPropagation();
     if (!dragState.hasMoved) {
@@ -128,12 +127,10 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ tables, setTables, onClose }) =
     }
   };
 
-  // Add Table
   const handleAddTable = () => {
     const scrollX = containerRef.current?.scrollLeft || 0;
     const scrollY = containerRef.current?.scrollTop || 0;
     
-    // Add to center of current view
     const newTable: TableData = {
       id: `t-${Date.now()}`,
       name: '新桌子',
@@ -146,22 +143,39 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ tables, setTables, onClose }) =
       })),
     };
     setTables([...tables, newTable]);
+    setHasUnsavedChanges(true);
   };
 
   const handleSaveTable = (updated: TableData) => {
     setTables(tables.map(t => t.id === updated.id ? updated : t));
+    setHasUnsavedChanges(true);
   };
 
   const handleDeleteTable = (id: string) => {
     setTables(tables.filter(t => t.id !== id));
+    setHasUnsavedChanges(true);
+  };
+
+  const handleSaveChanges = () => {
+    onSave(tables);
+    setHasUnsavedChanges(false);
   };
 
   return (
     <div className="fixed inset-0 bg-gray-100 z-50 flex flex-col select-none">
-      {/* Admin Header */}
       <div className="bg-white border-b px-4 py-3 flex justify-between items-center shadow-sm z-20">
-        <h2 className="font-bold text-gray-800">🛠️ 管理员模式: 布局配置</h2>
+        <h2 className="font-bold text-gray-800 flex items-center gap-2">
+           🛠️ 管理员模式
+           {hasUnsavedChanges && <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full">未保存</span>}
+        </h2>
         <div className="flex gap-2">
+           <button 
+             onClick={handleSaveChanges}
+             className={`text-white text-xs px-4 py-2 rounded shadow transition-all ${hasUnsavedChanges ? 'bg-blue-600 hover:bg-blue-700 animate-pulse' : 'bg-blue-400'}`}
+           >
+             💾 保存布局
+           </button>
+           <div className="w-px h-6 bg-gray-300 mx-1"></div>
            <button 
              onClick={handleAddTable}
              className="bg-green-600 text-white text-xs px-3 py-2 rounded shadow hover:bg-green-700 active:scale-95 transition-transform"
@@ -172,12 +186,11 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ tables, setTables, onClose }) =
              onClick={onClose}
              className="bg-gray-800 text-white text-xs px-3 py-2 rounded shadow hover:bg-gray-900 active:scale-95 transition-transform"
            >
-             退出管理
+             退出
            </button>
         </div>
       </div>
 
-      {/* Canvas Area */}
       <div 
         ref={containerRef}
         className={`flex-1 overflow-auto relative bg-stone-50 ${dragState.mode === 'canvas' ? 'cursor-grabbing' : 'cursor-grab'}`}
@@ -199,7 +212,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ tables, setTables, onClose }) =
                 left: table.x,
                 top: table.y,
                 cursor: dragState.mode === 'table' && dragState.targetId === table.id ? 'grabbing' : 'grab',
-                touchAction: 'none' // Critical for handling touch drag without scrolling browser
+                touchAction: 'none'
               }}
               onMouseDown={(e) => startTableDrag(e, table)}
               onTouchStart={(e) => startTableDrag(e, table)}
@@ -215,7 +228,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ tables, setTables, onClose }) =
         <p>👆 点击桌子编辑信息</p>
       </div>
 
-      {/* Edit Modal */}
       {editingTable && (
         <EditModal
           table={editingTable}

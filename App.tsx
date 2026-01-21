@@ -1,13 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { MOCK_TABLES } from './constants';
 import { UserState, TableData } from './types';
 import Table from './components/Table';
 import FortuneModal from './components/FortuneModal';
 import AdminPanel from './components/AdminPanel';
 
 const App: React.FC = () => {
-  // State for Tables (Initialize from Mock)
-  const [tables, setTables] = useState<TableData[]>(MOCK_TABLES);
+  const [tables, setTables] = useState<TableData[]>([]);
+  const [loading, setLoading] = useState(true);
   
   const [userState, setUserState] = useState<UserState>({
     isLoggedIn: false,
@@ -20,6 +19,47 @@ const App: React.FC = () => {
   const [isAdminMode, setIsAdminMode] = useState(false);
   const [isCardMinimized, setIsCardMinimized] = useState(false);
 
+  // Fetch Tables on Mount
+  useEffect(() => {
+    fetch('/api/tables')
+      .then(res => {
+        if (!res.ok) {
+          throw new Error(`Server error: ${res.status}`);
+        }
+        return res.json();
+      })
+      .then(data => {
+        if (Array.isArray(data)) {
+            setTables(data);
+        } else {
+            console.error("Received invalid data format:", data);
+            setTables([]);
+        }
+        setLoading(false);
+      })
+      .catch(err => {
+        console.error("Failed to load tables", err);
+        setLoading(false);
+      });
+  }, []);
+
+  const handleSaveTables = async (newTables: TableData[]) => {
+    setTables(newTables);
+    try {
+      const res = await fetch('/api/tables', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newTables),
+      });
+      if (!res.ok) {
+        throw new Error("Save failed");
+      }
+    } catch (err) {
+      console.error("Failed to save tables", err);
+      alert("保存失败，请检查网络");
+    }
+  };
+
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputValue.trim()) {
@@ -27,7 +67,6 @@ const App: React.FC = () => {
       return;
     }
 
-    // Search logic using current 'tables' state, not the constant
     let found = null;
     const trimmedName = inputValue.trim();
 
@@ -51,7 +90,7 @@ const App: React.FC = () => {
         foundSeat: found,
       });
       setErrorMsg('');
-      setIsCardMinimized(false); // Reset minimize state on new login
+      setIsCardMinimized(false);
     } else {
       setErrorMsg('未找到该姓名，请尝试 "张三" 或 "Alice"');
     }
@@ -67,12 +106,10 @@ const App: React.FC = () => {
     setShowFortune(false);
   };
 
-  // Scroll to table when found
   useEffect(() => {
     if (userState.foundSeat) {
       const element = document.getElementById(`table-${userState.foundSeat.tableId}`);
       if (element) {
-        // Delay to allow layout to settle
         setTimeout(() => {
            element.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
         }, 500); 
@@ -80,18 +117,21 @@ const App: React.FC = () => {
     }
   }, [userState.foundSeat]);
 
+  if (loading) {
+    return <div className="min-h-screen flex items-center justify-center text-festive-red">加载中...</div>;
+  }
+
   return (
     <div className="min-h-screen bg-stone-50 text-gray-800 pb-20 relative overflow-hidden flex flex-col">
-      {/* Admin Panel Toggle */}
       {isAdminMode ? (
         <AdminPanel 
           tables={tables} 
           setTables={setTables} 
+          onSave={handleSaveTables}
           onClose={() => setIsAdminMode(false)} 
         />
       ) : (
         <>
-          {/* Header */}
           <header className="bg-festive-red text-white p-4 sticky top-0 z-40 shadow-md shrink-0">
             <div className="flex justify-between items-center max-w-md mx-auto">
               <h1 className="text-lg font-bold flex items-center gap-2">
@@ -110,7 +150,6 @@ const App: React.FC = () => {
 
           <main className="flex-1 relative flex flex-col overflow-hidden">
             {!userState.isLoggedIn ? (
-              // Login Screen
               <div className="overflow-auto flex-1">
                 <div className="max-w-md mx-auto p-4 flex flex-col items-center justify-center min-h-[60vh] animate-fade-in">
                   <div className="bg-white p-8 rounded-2xl shadow-xl w-full border-t-4 border-festive-red">
@@ -145,11 +184,6 @@ const App: React.FC = () => {
                       </button>
                     </form>
                     
-                    <div className="mt-6 text-center text-xs text-gray-400">
-                      测试账号: 张三, 李四, Alice, Bob
-                    </div>
-                    
-                    {/* Admin Entry for Demo */}
                     <div className="mt-8 pt-4 border-t text-center">
                       <button 
                         onClick={() => setIsAdminMode(true)}
@@ -162,9 +196,7 @@ const App: React.FC = () => {
                 </div>
               </div>
             ) : (
-              // Seating Chart Screen
               <div className="h-full flex flex-col animate-slide-up">
-                {/* User Info Card - Relative positioning to avoid blocking map */}
                 <div className="bg-stone-50 p-4 z-30 shadow-sm shrink-0">
                   <div className="bg-white/95 backdrop-blur-sm rounded-xl shadow-lg border-l-4 border-festive-gold overflow-hidden transition-all duration-300">
                     <div className="p-4">
@@ -204,9 +236,7 @@ const App: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Map View */}
                 <div className="overflow-auto flex-1 bg-stone-50 relative custom-scrollbar shadow-inner">
-                   {/* Map Container */}
                    <div 
                       className="min-w-[1200px] min-h-[1200px] relative pb-20"
                       style={{ 
@@ -233,14 +263,12 @@ const App: React.FC = () => {
             )}
           </main>
 
-          {/* Footer */}
           {!userState.isLoggedIn && (
             <footer className="fixed bottom-0 w-full bg-white border-t p-3 text-center text-xs text-gray-400">
               © 2025 Company Annual Meeting
             </footer>
           )}
 
-          {/* Fortune Modal */}
           {showFortune && userState.foundSeat && (
             <FortuneModal 
               name={userState.name} 
