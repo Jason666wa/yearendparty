@@ -18,6 +18,10 @@ const App: React.FC = () => {
   const [showFortune, setShowFortune] = useState(false);
   const [isAdminMode, setIsAdminMode] = useState(false);
   const [isCardMinimized, setIsCardMinimized] = useState(false);
+  const [showAdminPassword, setShowAdminPassword] = useState(false);
+  const [adminPassword, setAdminPassword] = useState('');
+  const [adminPasswordError, setAdminPasswordError] = useState('');
+  const ADMIN_PASSWORD = 'xinhuadu2026';
 
   // Fetch Tables on Mount
   useEffect(() => {
@@ -186,7 +190,11 @@ const App: React.FC = () => {
                     
                     <div className="mt-8 pt-4 border-t text-center">
                       <button 
-                        onClick={() => setIsAdminMode(true)}
+                        onClick={() => {
+                          setShowAdminPassword(true);
+                          setAdminPassword('');
+                          setAdminPasswordError('');
+                        }}
                         className="text-[10px] text-gray-300 hover:text-gray-500"
                       >
                         管理员入口 (Admin)
@@ -275,6 +283,65 @@ const App: React.FC = () => {
               tableName={userState.foundSeat.tableName}
               onClose={() => setShowFortune(false)}
             />
+          )}
+
+          {showAdminPassword && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+              <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 border-t-4 border-festive-red">
+                <div className="text-center mb-6">
+                  <h2 className="text-2xl font-bold text-gray-800 mb-2">管理员验证</h2>
+                  <p className="text-gray-500 text-sm">请输入管理员密码</p>
+                </div>
+                <form onSubmit={(e) => {
+                  e.preventDefault();
+                  if (adminPassword === ADMIN_PASSWORD) {
+                    setIsAdminMode(true);
+                    setShowAdminPassword(false);
+                    setAdminPassword('');
+                    setAdminPasswordError('');
+                  } else {
+                    setAdminPasswordError('密码错误，请重试');
+                    setAdminPassword('');
+                  }
+                }} className="space-y-4">
+                  <div>
+                    <input
+                      type="password"
+                      value={adminPassword}
+                      onChange={(e) => {
+                        setAdminPassword(e.target.value);
+                        setAdminPasswordError('');
+                      }}
+                      placeholder="请输入密码"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-festive-red focus:border-festive-red outline-none transition-all"
+                      autoFocus
+                    />
+                    {adminPasswordError && (
+                      <p className="text-red-500 text-sm mt-2 animate-pulse">{adminPasswordError}</p>
+                    )}
+                  </div>
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowAdminPassword(false);
+                        setAdminPassword('');
+                        setAdminPasswordError('');
+                      }}
+                      className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+                    >
+                      取消
+                    </button>
+                    <button
+                      type="submit"
+                      className="flex-1 px-4 py-2 bg-festive-red text-white rounded-lg hover:bg-deep-red transition-colors font-medium"
+                    >
+                      确认
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
           )}
         </>
       )}
