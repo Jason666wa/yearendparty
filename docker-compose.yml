@@ -1,12 +1,52 @@
-version: '3.8'
+# Docker Compose 配置
+# 注意：使用前请在 Docker Desktop 中配置清华大学镜像加速器
+# 设置路径：Docker Desktop -> Settings -> Docker Engine
+# 添加配置：
+# {
+#   "registry-mirrors": ["https://docker.mirrors.tuna.tsinghua.edu.cn"]
+# }
+# 然后点击 Apply & Restart
 
 services:
-  app:
-    build: .
+  mysql:
+    image: mysql:8.0  # 将通过配置的镜像加速器从清华源拉取
+    container_name: yearendparty_mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-rootpassword}
+      MYSQL_DATABASE: yearendparty
+      MYSQL_USER: ${DB_USER:-appuser}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-rootpassword}
     ports:
-      - "80:3000"
+      - "3306:3306"
     volumes:
-      - ./data:/app/data
+      - mysql_data:/var/lib/mysql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    restart: always
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpassword"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # 构建时会使用 Dockerfile 中的 node:20-alpine 镜像
+    # 该镜像也会通过配置的镜像加速器从清华源拉取
+    ports:
+      - "8080:3000"  # 使用 8080 端口避免需要管理员权限
+    depends_on:
+      mysql:
+        condition: service_healthy
     environment:
       - API_KEY=${API_KEY}
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_USER=${DB_USER:-appuser}
+      - DB_PASSWORD=${DB_PASSWORD:-rootpassword}
+      - DB_NAME=yearendparty
     restart: always
+
+volumes:
+  mysql_data:
