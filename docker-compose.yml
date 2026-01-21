@@ -17,7 +17,7 @@ services:
       MYSQL_USER: ${DB_USER:-appuser}
       MYSQL_PASSWORD: ${DB_PASSWORD:-rootpassword}
     ports:
-      - "3306:3306"
+      - "3636:3306"
     volumes:
       - mysql_data:/var/lib/mysql
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql
@@ -35,7 +35,7 @@ services:
     # 构建时会使用 Dockerfile 中的 node:20-alpine 镜像
     # 该镜像也会通过配置的镜像加速器从清华源拉取
     ports:
-      - "8080:3000"  # 使用 8080 端口避免需要管理员权限
+      - "8282:3000"  # 使用 8282 端口避免需要管理员权限
     depends_on:
       mysql:
         condition: service_healthy
